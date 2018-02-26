@@ -1,0 +1,139 @@
+<html>
+<template id="autoCompleteDropdownTemplate">
+  <style>
+    .auto-complete-dropdown {
+      display: flex;
+      flex-direction: column;
+      width: 170px;
+    }
+
+    #inputBox,
+    #optionsArea {
+      width: 170px;
+    }
+
+    #optionsArea {
+      max-height: 100px;
+      border: 1px solid gray;
+      overflow-x: hidden;
+      overflow-y: scroll;
+      position: absolute;
+      margin-top: 21px;
+      z-index: 1;
+      background: white;
+    }
+
+    .option {
+      cursor: pointer;
+    }
+
+    .option:hover {
+      background: lightblue;
+    }
+
+    .hide {
+      display: none;
+    }
+  </style>
+
+  <div class="auto-complete-dropdown">
+    <input type="text" id="inputBox"></input>
+    <div id="optionsArea" class="hide"></div>
+  </div>
+
+</template>
+<script>
+
+  // TODO: make width (via css) configurable via attribute
+  const importDoc = document.currentScript.ownerDocument;
+  const autoCompleteDropdownPrototype = Object.create(HTMLElement.prototype);
+  autoCompleteDropdownPrototype.createdCallback = function () {
+    const shadow = this.createShadowRoot();
+    const template = importDoc.querySelector('#autoCompleteDropdownTemplate');
+    shadow.appendChild(template.content.cloneNode(true));
+  };
+
+  autoCompleteDropdownPrototype.attributeChangedCallback = function (name, oldValue, newValue) {
+    update(this);
+  };
+
+  function inputKeyUp(elem, event) {
+    const shadow = elem.shadowRoot;
+    const inputBox = shadow.querySelector("#inputBox");
+    const optionsArea = shadow.querySelector("#optionsArea");
+    const search = inputBox.value.toUpperCase();
+    let opts = JSON.parse(elem.getAttribute("options"));
+    opts = opts.filter(i => i.label.toUpperCase().startsWith(search)).sort((a, b) => a.label < b.label ? -1 : 1);
+
+    // if the user presses enter, and there is only one item, select it
+    if (event && event.key === "Enter" && opts.length === 1) {
+      inputBox.value = opts[0].label;
+      inputKeyUp(elem, null);
+      return;
+    }
+
+    // clear out previous options
+    while (optionsArea.firstChild) {
+      optionsArea.removeChild(optionsArea.firstChild);
+    }
+    // add each option
+    // TODO: im out of time, but we can do this much faster by walking the existing options, and removing any not in the list and adding in the new ones
+    opts.forEach(o => addOption(inputBox, optionsArea, o));
+    // hide and fire selected events if needed
+    if (search === "" || (opts.length === 1 && opts[0].label.toUpperCase() === search)) {
+      hide(optionsArea);
+      fireSelected(optionsArea, opts[0]);
+    } else {
+      show(optionsArea);
+      // deselection
+      fireSelected(optionsArea, null);
+    }
+  }
+
+  // hide an element
+  function hide(elem) {
+    elem.classList.add('hide');
+  }
+
+  // show an element
+  function show(elem) {
+    elem.classList.remove('hide');
+  }
+
+  // add option to list
+  function addOption(inputBox, optionsArea, option) {
+    const opt = document.createElement('div');
+    opt.innerHTML = option.label;
+    opt.tag = option;
+    opt.className = "option";
+    opt.addEventListener('click', () => optionClick(opt, optionsArea, inputBox));
+    optionsArea.appendChild(opt);
+  }
+
+  // tell consumer of a selection event (or deselection)
+  function optionClick(opt, optionsArea, inputBox) {
+    // set input to our selected option
+    inputBox.value = opt.tag.label;
+    // hide our options
+    hide(optionsArea);
+    // tell consumer
+    fireSelected(opt, opt.tag);
+  }
+
+  function fireSelected(elem, option) {
+    elem.dispatchEvent(new CustomEvent('selection-changed', { bubbles: true, composed: true, detail: option }));
+  }
+
+  // update with new options
+  function update(elem) {
+    const shadow = elem.shadowRoot;
+    const inputBoxNode = shadow.querySelector("#inputBox");
+    inputBoxNode.addEventListener('keyup', event => inputKeyUp(elem, event));
+  }
+
+  document.registerElement("auto-complete-dropdown", {
+    prototype: autoCompleteDropdownPrototype
+  });
+</script>
+
+</html>
